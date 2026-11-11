@@ -6,6 +6,11 @@ __pycache__/
 .venv/
 venv/
 
+# Package builds
+build/
+dist/
+*.egg-info/
+
 # Testing and linting
 .pytest_cache/
 .ruff_cache/
