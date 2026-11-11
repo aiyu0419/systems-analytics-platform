@@ -1,0 +1,32 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Testing and linting
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+
+# Generated experiment data
+data/
+results/
+checkpoints/
+
+# Local databases
+*.db
+*.sqlite3
+
+# IDE and macOS
+.DS_Store
+.idea/
+.vscode/
