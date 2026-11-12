@@ -1,80 +1,62 @@
 # Systems Analytics Platform
 
-A learning-driven distributed data engineering platform for collecting, validating, processing, storing, and analyzing system performance telemetry.
+A learning-driven distributed data engineering platform for ingesting, validating, processing, storing, and analyzing system performance telemetry.
 
 ## 1. Project Overview
 
-Systems Analytics Platform is an independent engineering project focused on backend software development, distributed systems, data engineering, analytics, and infrastructure deployment.
+Systems Analytics Platform is an independent software engineering project exploring backend development, data engineering, distributed systems, analytics, and infrastructure deployment.
 
-The initial data source is [PowerPerf Lab](https://github.com/aiyu0419/powerperf-lab), a Python-based framework for controlled CPU performance experiments.
+The initial data source is [PowerPerf Lab](https://github.com/aiyu0419/powerperf-lab), a Python framework for controlled CPU performance experiments.
 
-The platform will evolve incrementally from a local Python ingestion application into a distributed analytics system using Kafka, Spark, PostgreSQL, Docker, and Kubernetes.
+The platform is developed incrementally through tested components, documented engineering decisions, and reproducible experiments.
 
-### Engineering Objectives
+### Objectives
 
-- Implement reliable data ingestion and validation.
-- Design versioned event contracts.
-- Build an event-driven architecture using Kafka.
-- Implement distributed transformations with Spark.
-- Design analytical storage with PostgreSQL.
-- Visualize experiment performance and reliability.
-- Containerize and deploy application services.
-- Evaluate throughput, latency, correctness, and recovery behavior.
+- Build reliable Python data ingestion.
+- Design and validate versioned event contracts.
+- Stream events through Apache Kafka.
+- Process data with Spark Structured Streaming.
+- Persist analytical results in PostgreSQL.
+- Visualize performance metrics using Streamlit.
+- Containerize services with Docker.
+- Explore service management with Kubernetes.
+- Evaluate data correctness, reliability, throughput, and latency.
 
 ## 2. Planned Architecture
 
-**Data sources**
+PowerPerf Lab / Synthetic Event Generator
 
-PowerPerf Lab / Synthetic Event Generator / Future SoC Simulations
+→ Python File Ingestion and Validation
 
-↓
+→ Apache Kafka
 
-**Python Ingestion Layer**
+→ Apache Spark Structured Streaming
 
-Schema validation, source normalization, deterministic event identification
+→ PostgreSQL / Parquet
 
-↓
+→ Streamlit Dashboard
 
-**Apache Kafka**
+Docker Compose will support local infrastructure. Kubernetes will be introduced for later deployment exercises.
 
-Event distribution, retention, and replay
-
-↓
-
-**Apache Spark Structured Streaming**
-
-Streaming transformations and aggregation
-
-↓
-
-**PostgreSQL / Parquet**
-
-Structured results and historical data
-
-↓
-
-**Streamlit Dashboard**
-
-Engineering performance analytics and regression investigation
-
-Docker Compose will provide the initial infrastructure environment. Kubernetes deployment will be introduced later.
+This represents the target architecture. Kafka, Spark, PostgreSQL, and Kubernetes have not been implemented yet.
 
 ## 3. Technology Stack
 
 | Component | Technology | Status |
 | --- | --- | --- |
-| Language | Python 3.14 | Configured |
+| Programming language | Python 3.14 locally | Configured |
 | Packaging | Setuptools / pyproject.toml | Configured |
 | Virtual environment | venv | Configured |
-| Schema validation | Pydantic v2 | Implemented |
-| Testing | pytest | Configured |
-| Linting | Ruff | Configured |
-| Event broker | Kafka | Planned |
-| Stream processing | Spark | Planned |
+| Data validation | Pydantic v2 | Implemented |
+| CSV and JSON ingestion | Python standard library | Implemented |
+| Unit testing | pytest | Implemented |
+| Linting and formatting | Ruff | Configured |
+| Event streaming | Apache Kafka | Planned |
+| Stream processing | Apache Spark | Planned |
 | Database | PostgreSQL | Planned |
 | Historical storage | Parquet | Planned |
 | Visualization | Streamlit | Planned |
-| Containers | Docker Compose | Planned |
+| Containerization | Docker Compose | Planned |
 | Orchestration | Kubernetes | Planned |
 
 ## 4. Repository Structure
@@ -89,232 +71,246 @@ systems-analytics-platform/
 │       ├── __init__.py
 │       └── ingestion/
 │           ├── __init__.py
-│           └── schemas.py
+│           ├── schemas.py
+│           └── powerperf_reader.py
 └── tests/
     └── unit/
         ├── test_package.py
-        └── test_event_schemas.py
+        ├── test_event_schemas.py
+        └── test_powerperf_reader.py
 ```
 
-Additional service, storage, and deployment directories will be created during subsequent phases.
+## 5. Data Sources
 
-## 5. Data Sources and Event Contracts
+PowerPerf experiments produce:
 
-### PowerPerf Lab
+- `config.json` — Experiment configuration.
+- `metadata.json` — Machine and runtime metadata.
+- `runs.csv` — Individual benchmark execution records.
+- `telemetry.csv` — CPU utilization and available memory samples.
 
-The platform will ingest four source files:
+The current PowerPerf telemetry does not include direct measurements of electrical power or energy consumption.
 
-- `config.json`: Experiment parameters.
-- `metadata.json`: Machine and runtime metadata.
-- `runs.csv`: Benchmark execution records.
-- `telemetry.csv`: CPU and memory telemetry samples.
+## 6. Ingestion Architecture
 
-The existing PowerPerf telemetry does not directly measure electrical power or energy consumption.
+The ingestion reader performs the following operations:
 
-### BenchmarkRunEvent
+1. Read and parse the experiment's configuration and metadata.
+2. Verify CSV headers and required fields.
+3. Convert text values into native Python types.
+4. Construct versioned Pydantic event models.
+5. Validate benchmark execution semantics.
+6. Generate deterministic event identifiers.
+7. Reject duplicate run IDs and orphan telemetry.
+8. Return validated experiment records in memory.
 
-Represents one completed benchmark execution.
+### Input
 
-Important fields include:
+A directory containing the four PowerPerf files.
 
-- `event_id`: Deterministic logical event identifier.
-- `experiment_id`: Stable experiment identifier.
-- `host_id`: Source machine identifier.
-- `run_id`: Original PowerPerf run identifier.
-- `workers`: Number of worker processes.
-- `iterations`: Total workload size.
-- `warmup`: Whether the run is a warmup.
-- `status`: Execution outcome.
-- `wall_time_s`: Controller-measured elapsed time.
-- `workload_time_s`: Optional workload-reported time.
-- `checksum`: Optional validated workload output.
-- `timestamp_utc`: Timezone-aware timestamp.
+### Output
 
-### TelemetryEvent
+An `ExperimentData` object containing:
 
-Represents one system telemetry sample linked to a benchmark run.
+- Experiment identifier
+- Host identifier
+- Experiment configuration
+- Source metadata
+- Validated benchmark run events
+- Validated telemetry events
 
-Important fields include:
+### Identifier Strategy
 
-- `event_id`
-- `experiment_id`
-- `host_id`
-- `run_id`
-- `sample_index`
-- `timestamp_utc`
-- `cpu_percent_system`
-- `memory_available_bytes`
+The caller supplies a stable `experiment_id` and `host_id`.
 
-### Event Identification
-
-Benchmark event identity uses:
+Benchmark events are identified by a hash of:
 
 `event_type + experiment_id + run_id`
 
-Telemetry event identity uses:
+Telemetry events use:
 
 `event_type + experiment_id + run_id + sample_index`
 
-Identifiers are generated using SHA-256 over a canonical JSON representation of their components.
+The telemetry sample index is assigned from the source-file row order within each run.
 
-The stable experiment identifier and telemetry sample ordering will be supplied by the ingestion reader in the next lesson.
+Re-importing unchanged files with the same identifiers produces the same event IDs.
 
-### Validation Rules
+### Validation and Missing Data
 
-- Unexpected fields are rejected.
-- Required identifiers must be nonempty.
-- Worker counts and iteration counts must be positive.
-- Wall-clock duration must be finite and positive.
-- CPU utilization must be between 0 and 100 percent.
-- Memory availability cannot be negative.
-- Timestamps must include timezone information and are normalized to UTC.
-- Successful runs require a checksum and exit code zero.
-- Failed or timed-out runs may have missing workload timing and checksum.
-- An event identifier must match its declared logical identity.
+The reader distinguishes missing source columns from empty optional cells.
 
-### Schema Versioning
+Optional missing measurements are represented as `None`.
 
-Events currently use schema version `1`.
+Unsuccessful benchmark executions are retained if structurally valid. They are not removed simply because workload timing or checksum values are unavailable.
 
-Future incompatible changes will require explicit schema evolution rather than silently changing the interpretation of existing data.
+Filtering unsuccessful executions belongs to metric-specific analytical queries.
 
-## 6. Development Setup
+## 7. Development Setup
 
 ### Requirements
 
-- Python 3.14
+- Python 3.14 for the current development environment
 - Git
 - pip
 
-### Clone the repository
+### Clone
 
 ```bash
 git clone https://github.com/aiyu0419/systems-analytics-platform.git
 cd systems-analytics-platform
 ```
 
-### Create a virtual environment
+### Create and activate a virtual environment
 
 ```bash
 python3.14 -m venv .venv
 source .venv/bin/activate
 ```
 
-### Install the application and development tools
+### Install dependencies
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-### Run unit tests
+### Execute tests
 
 ```bash
 python -m pytest -v
 ```
 
-### Run linting and formatting checks
+### Validate code quality
 
 ```bash
 python -m ruff check .
 python -m ruff format --check .
 ```
 
-## 7. Implemented Components
+## 8. Using the PowerPerf Reader
 
-### Python Project Foundation
+The reader imports the `read_experiment` function from:
 
-- Installable Python package using a `src/` layout.
-- Dependency and tool configuration in `pyproject.toml`.
-- Virtual environment setup.
-- Automated smoke tests.
-- Ruff linting and formatting.
+`systems_analytics.ingestion.powerperf_reader`
 
-### Data Contracts
+Example:
 
-- Shared `EventBase` model.
-- `BenchmarkRunEvent` validation model.
-- `TelemetryEvent` validation model.
-- Deterministic event identifier generation.
-- Timezone-aware timestamp handling.
-- Required and nullable field validation.
-- Cross-field consistency rules.
-- JSON serialization and deserialization.
-- Unit tests for valid and invalid records.
+```python
+from pathlib import Path
 
-## 8. Development Roadmap
+from systems_analytics.ingestion.powerperf_reader import read_experiment
+
+experiment = read_experiment(
+    Path("/path/to/powerperf/results/cpu-scaling"),
+    experiment_id="powerperf-cpu-001",
+    host_id="macbook-01",
+)
+
+print(len(experiment.runs))
+print(len(experiment.telemetry))
+```
+
+The example requires an existing PowerPerf experiment directory.
+
+No Kafka broker or database is required to execute the reader.
+
+## 9. Automated Testing
+
+The test suite includes:
+
+- Package installation smoke tests.
+- Pydantic schema validation tests.
+- CSV numeric and Boolean parsing tests.
+- Optional-field handling tests.
+- Deterministic event ID tests.
+- Missing-file and malformed-JSON tests.
+- Duplicate run ID detection.
+- Orphan telemetry detection.
+- Missing CSV column detection.
+- Invalid timestamp and duration rejection.
+
+Run ingestion tests independently:
+
+```bash
+python -m pytest tests/unit/test_powerperf_reader.py -v
+```
+
+## 10. Development Roadmap
 
 ### Phase 1 — Foundation and Ingestion
 
-- [x] Lesson 1.1: GitHub repository initialization.
-- [x] Lesson 1.2: Python development environment and tooling.
-- [x] Lesson 1.3: Versioned event models and schema validation.
-- [ ] Lesson 1.4: PowerPerf CSV and JSON file ingestion.
-- [ ] Lesson 1.5: Event normalization and serialization.
-- [ ] Lesson 1.6: Ingestion testing and error handling.
+- [x] Lesson 1.1 — GitHub repository initialization.
+- [x] Lesson 1.2 — Python packaging and development environment.
+- [x] Lesson 1.3 — Pydantic data contracts and validation.
+- [x] Lesson 1.4 — PowerPerf CSV and JSON ingestion.
+- [ ] Lesson 1.5 — Event serialization and export.
+- [ ] Lesson 1.6 — Ingestion integration and robustness testing.
 
 ### Phase 2 — Kafka and PostgreSQL
 
-- [ ] Configure Kafka and PostgreSQL with Docker Compose.
-- [ ] Implement a Kafka producer.
+- [ ] Configure Kafka and PostgreSQL using Docker Compose.
+- [ ] Implement a Kafka event producer.
 - [ ] Implement a PostgreSQL consumer.
-- [ ] Add idempotent persistence and duplicate-event tests.
+- [ ] Establish idempotent database writes.
 
 ### Phase 3 — Spark
 
-- [ ] Implement Structured Streaming ingestion.
-- [ ] Build transformations and analytical aggregations.
-- [ ] Introduce checkpointing and recovery tests.
+- [ ] Implement streaming event transformations.
+- [ ] Add windowed aggregations.
+- [ ] Test checkpointing and recovery.
 
 ### Phase 4 — Analytics Dashboard
 
-- [ ] Build Streamlit visualizations.
-- [ ] Compare performance experiments.
-- [ ] Analyze scaling, variability, and failure rates.
-- [ ] Investigate performance regressions.
+- [ ] Build the Streamlit application.
+- [ ] Analyze execution performance and scaling.
+- [ ] Calculate reliability and data quality metrics.
+- [ ] Compare experiments and investigate regressions.
 
 ### Phase 5 — Kubernetes
 
-- [ ] Configure a development Kubernetes environment.
-- [ ] Deploy selected application services.
-- [ ] Implement health probes and resource management.
-- [ ] Test application recovery.
+- [ ] Configure a local Kubernetes development environment.
+- [ ] Deploy stateless application services.
+- [ ] Configure health checks and resource limits.
+- [ ] Test service recovery.
 
-### Phase 6 — Reliability and Evaluation
+### Phase 6 — Evaluation
 
-- [ ] Measure ingestion throughput and processing latency.
-- [ ] Evaluate duplicate handling and replay.
-- [ ] Test service failures and recovery.
-- [ ] Document system tradeoffs and experimental results.
+- [ ] Measure ingestion throughput.
+- [ ] Measure processing latency.
+- [ ] Test duplicate and malformed events.
+- [ ] Evaluate system reliability.
+- [ ] Document engineering tradeoffs.
 
-## 9. Engineering Principles
+## 11. Engineering Principles
 
-**Data correctness:** Preserve the difference between missing measurements and unsuccessful executions.
+**Correctness:** Validate data before downstream processing.
 
-**Idempotency:** Reprocessing an existing logical event must not create duplicate analytical results.
+**Separation of concerns:** Keep performance measurement independent from distributed analytics infrastructure.
 
-**Reproducibility:** Keep source experiment configurations, machine metadata, and software versions associated with measured results.
+**Data retention:** Retain unsuccessful executions for reliability analysis.
 
-**Schema evolution:** Version contracts and validate backward compatibility when making changes.
+**Idempotency:** Assign stable logical event identifiers and later enforce uniqueness in persistent storage.
 
-**Observability:** Measure failures, throughput, processing latency, and resource utilization.
+**Reproducibility:** Preserve experiment configuration and machine metadata.
 
-**Separation of concerns:** Keep benchmark execution independent of the distributed analytics platform.
+**Observability:** Design for measurable errors, latency, throughput, and recovery behavior.
 
-**Incremental verification:** Test each component before introducing additional infrastructure.
+**Incremental development:** Implement and test working components before adding infrastructure complexity.
 
-## 10. Current Limitations
+## 12. Current Limitations
 
-- PowerPerf CSV ingestion is not yet implemented.
-- Experiment identifier assignment is not yet implemented.
-- Kafka, Spark, PostgreSQL, and Kubernetes are not configured.
-- Database-enforced idempotency does not yet exist.
-- Tests currently validate data models rather than complete end-to-end processing.
-- Dependency versions are constrained but not yet locked to a fully reproducible environment.
+- The reader loads entire experiment files into memory.
+- CSV parsing supports the currently known PowerPerf schema.
+- Experiment and host IDs are supplied manually.
+- Telemetry identifiers depend on stable source-file ordering.
+- Configuration and metadata JSON are checked for top-level object structure, but not yet validated against comprehensive schemas.
+- The reader stops on the first invalid record rather than producing a complete rejection report.
+- Kafka, Spark, PostgreSQL, Docker, and Kubernetes are not yet implemented.
+- Database-enforced deduplication does not yet exist.
 
-The project remains an educational engineering system under active development.
+The project is an educational engineering system under active development.
 
-Only synthetic data or personally owned performance experiment results will be used.
+Only synthetic or personally owned benchmark data will be used.
 
-## 11. License
+## 13. License
 
 No open-source license has been selected yet.
